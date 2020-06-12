@@ -86,11 +86,11 @@ struct rand_params {
 
 __host__ uint64_t get_start_seed(uint64_t offset) {
 	uint64_t seed = 0;
-	uint64_t i;
-	for (i = 0; i < offset; i += 1024 * 1024) {
+	uint64_t i = 0;
+	for (; i + 1024 * 1024 <= offset; i += 1024 * 1024) {
 		seed = (seed * 280364631195649ULL + 215216710221824ULL) & RANDOM_MASK;
 	}
-	for (i -= 1024 * 1024; i < offset; i++) {
+	for (; i < offset; i++) {
 		seed = (seed * RANDOM_MULTIPLIER + RANDOM_ADDEND) & RANDOM_MASK;
 	}
 	return seed;
