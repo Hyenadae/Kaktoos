@@ -106,11 +106,13 @@ __host__ void gen_rand_params(rand_params *rp, size_t n) {
 }
 
 // TODO: generate low bits seperately so crack() only has to index 32 bit values, ~3% speed improvement
-__global__ __launch_bounds__(BLOCK_SIZE, 2) void init(rand_params *rp, uint64_t *random, uint64_t seed) {
+__global__ __launch_bounds__(BLOCK_SIZE, 2) void init(rand_params *rp, uint64_t *random, uint64_t seed, uint64_t m, uint64_t a) {
 	size_t index = blockIdx.x * blockDim.x + threadIdx.x;
 	size_t stride = blockDim.x * gridDim.x;
-	for (size_t i = index; i < WORK_RANDOM_SIZE; i += stride) {
-		seed = (seed * rp[i].multiplier + rp[i].addend) & RANDOM_MASK;
+	seed = (seed * rp[index].multiplier + rp[index].addend) & RANDOM_MASK;
+	random[index] = seed;
+	for (size_t i = index + stride; i < WORK_RANDOM_SIZE; i += stride) {
+		seed = (seed * m + a) & RANDOM_MASK;
 		random[i] = seed;
 	}
 }
@@ -211,9 +213,10 @@ void gpu_manager(int32_t gpu_index) {
 		nodes[gpu_index].rp[i] = rp[i];
     while (offset < END) {
         *nodes[gpu_index].num_seeds = 0;
-        init<<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE, 0>>>(nodes[gpu_index].rp, nodes[gpu_index].random, seed);
+		uint64_t m = rp[WORK_UNIT_SIZE].multiplier, a = rp[WORK_UNIT_SIZE].addend;
+        init<<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE, 0>>>(nodes[gpu_index].rp, nodes[gpu_index].random, seed, m, a);
         info_lock.lock();
-		seed = (seed * rp[WORK_UNIT_SIZE].multiplier + rp[WORK_UNIT_SIZE].addend) & RANDOM_MASK;
+		seed = (seed * m + a) & RANDOM_MASK;
 		offset += WORK_UNIT_SIZE;
         info_lock.unlock();
         cudaDeviceSynchronize();
