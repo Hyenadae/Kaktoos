@@ -5,7 +5,6 @@
 #define RNG_ADD 11ULL
 #define RNG_MASK ((1ULL << 48) - 1)
 
-#endif
 #ifndef BEGIN
 #define BEGIN 0
 #endif
@@ -207,13 +206,14 @@ uint64_t chunk_mul[CHUNK_SIZE + 1];
 uint64_t offset = 0;
 uint64_t seed = 0;
 uint64_t total_seeds = 0;
-std::mutex mutex;
+std::mutex mutexcuda;
+std::thread threads[1];
 
-void run(int32_t gpu)
+void run(int gpu_device)
 {
 	uint64_t *out;
 	uint64_t *out_n;
-	cudaSetDevice(gpu);
+	cudaSetDevice(gpu_device);
 	cudaMallocManaged(&out, GRID_SIZE * sizeof(*out));
 	cudaMallocManaged(&out_n, sizeof(*out_n));
 	cudaMemcpyToSymbol(block_add_gpu, block_add, (BLOCK_SIZE + 1) * sizeof(*block_add));
@@ -224,7 +224,7 @@ void run(int32_t gpu)
 	while (true) {
 		*out_n = 0;
 		{
-			std::lock_guard<std::mutex> lock(mutex);
+			std::lock_guard<std::mutex> lock(mutexcuda);
 			if (offset >= END) break;
 			uint64_t seed_gpu = (seed * RNG_MUL + RNG_ADD) & RNG_MASK;
 			crack<<<CHUNK_SIZE, BLOCK_SIZE>>>(seed_gpu, out, out_n);
@@ -233,7 +233,7 @@ void run(int32_t gpu)
 		}
 		cudaDeviceSynchronize();
 		{
-			std::lock_guard<std::mutex> lock(mutex);
+			std::lock_guard<std::mutex> lock(mutexcuda);
 			total_seeds += *out_n;
 			for (uint64_t i = 0; i < *out_n; i++)
 				printf("%lu\n", out[i]);
@@ -247,15 +247,14 @@ void run(int32_t gpu)
 
 int main()
 {
-
 	#ifdef BOINC
 	BOINC_OPTIONS options;
 
 	boinc_options_defaults(options);
 	options.normal_thread_priority = true;
 	boinc_init_options(&options);
-    #endif
-
+	#endif
+	
 	block_add[0] = 0;
 	block_mul[0] = 1;
 	for (uint64_t i = 0; i < BLOCK_SIZE; i++) {
@@ -274,24 +273,22 @@ int main()
 		seed = (seed * chunk_mul[CHUNK_SIZE] + chunk_add[CHUNK_SIZE]) & RNG_MASK;
 	for (; offset + 1 <= BEGIN; offset += 1)
 		seed = (seed * RNG_MUL + RNG_ADD) & RNG_MASK;
-
+	
+	int gpu_device = 0;
 	
 	#ifdef BOINC
 	APP_INIT_DATA aid;
 	boinc_get_init_data(aid);
 	
 	if (aid.gpu_device_num >= 0) {
-		gpu = aid.gpu_device_num;
-		fprintf(stderr,"boinc gpu %i gpuindex: %i \n", aid.gpu_device_num, gpu);
+		gpu_device = aid.gpu_device_num;
+		fprintf(stderr,"boinc gpu %i gpuindex: %i \n", aid.gpu_device_num, gpu_device);
 		} else {
-		fprintf(stderr,"stndalone gpuindex % \n", gpu);
+		fprintf(stderr,"stndalone gpuindex %i \n", gpu_device);
 	}
-		setCudaBlockingSync(gpu);
-		
 	#endif
 
-	
-	std::thread(run, gpu);
+	threads[0] = std::thread(run, gpu_device);
 
 	time_t start_time = time(NULL);
 	while (offset < END) {
@@ -305,10 +302,8 @@ int main()
 		boinc_fraction_done(frac);
 		fprintf(stderr, "%10.2fb %7lis %8.2fm/s %6.2f%% =%-6lu\n", done / 1000, elapsed, speed, frac * 100.0, total_seeds);
 	}
-
-	for (std::thread& thread : 1)
+	for (std::thread& thread : threads)
 		thread.join();
 		
 	boinc_finish(0);
-	
 }
