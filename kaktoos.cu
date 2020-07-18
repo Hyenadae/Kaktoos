@@ -5,8 +5,6 @@
 #define RNG_ADD 11ULL
 #define RNG_MASK ((1ULL << 48) - 1)
 
-#ifndef GPU_COUNT
-#define GPU_COUNT 1
 #endif
 #ifndef BEGIN
 #define BEGIN 0
@@ -18,13 +16,22 @@
 #define CACTUS_HEIGHT 9
 #endif
 #ifndef FLOOR_LEVEL
-#define FLOOR_LEVEL 63
+#define FLOOR_LEVEL 62
 #endif
 
 #include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <thread>
+
+#include <cuda.h>
+
+#ifdef BOINC
+  #include "boinc_api.h"
+#if defined _WIN32 || defined _WIN64
+  #include "boinc_win.h"
+#endif
+#endif
 
 __device__ uint64_t block_add_gpu[BLOCK_SIZE + 1];
 __device__ uint64_t block_mul_gpu[BLOCK_SIZE + 1];
@@ -201,7 +208,6 @@ uint64_t offset = 0;
 uint64_t seed = 0;
 uint64_t total_seeds = 0;
 std::mutex mutex;
-std::thread threads[GPU_COUNT];
 
 void run(int32_t gpu)
 {
@@ -241,6 +247,15 @@ void run(int32_t gpu)
 
 int main()
 {
+
+	#ifdef BOINC
+	BOINC_OPTIONS options;
+
+	boinc_options_defaults(options);
+	options.normal_thread_priority = true;
+	boinc_init_options(&options);
+    #endif
+
 	block_add[0] = 0;
 	block_mul[0] = 1;
 	for (uint64_t i = 0; i < BLOCK_SIZE; i++) {
@@ -260,8 +275,23 @@ int main()
 	for (; offset + 1 <= BEGIN; offset += 1)
 		seed = (seed * RNG_MUL + RNG_ADD) & RNG_MASK;
 
-	for (int i = 0; i < GPU_COUNT; i++)
-		threads[i] = std::thread(run, i);
+	
+	#ifdef BOINC
+	APP_INIT_DATA aid;
+	boinc_get_init_data(aid);
+	
+	if (aid.gpu_device_num >= 0) {
+		gpu = aid.gpu_device_num;
+		fprintf(stderr,"boinc gpu %i gpuindex: %i \n", aid.gpu_device_num, gpu);
+		} else {
+		fprintf(stderr,"stndalone gpuindex % \n", gpu);
+	}
+		setCudaBlockingSync(gpu);
+		
+	#endif
+
+	
+	std::thread(run, gpu);
 
 	time_t start_time = time(NULL);
 	while (offset < END) {
@@ -272,10 +302,13 @@ int main()
 		double frac = (double) count / (double) (END - BEGIN);
 		double done = (double) count / 1000000.0;
 		double speed = done / (double) elapsed;
+		boinc_fraction_done(frac);
 		fprintf(stderr, "%10.2fb %7lis %8.2fm/s %6.2f%% =%-6lu\n", done / 1000, elapsed, speed, frac * 100.0, total_seeds);
 	}
 
-	for (std::thread& thread : threads)
+	for (std::thread& thread : 1)
 		thread.join();
-	return 0;
+		
+	boinc_finish(0);
+	
 }
