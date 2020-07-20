@@ -5,12 +5,6 @@
 #define RNG_ADD 11ULL
 #define RNG_MASK ((1ULL << 48) - 1)
 
-#ifndef BEGIN
-#define BEGIN 0
-#endif
-#ifndef END
-#define END (1ULL << 48)
-#endif
 #ifndef CACTUS_HEIGHT
 #define CACTUS_HEIGHT 9
 #endif
@@ -209,6 +203,9 @@ uint64_t total_seeds = 0;
 std::mutex mutexcuda;
 std::thread threads[1];
 
+unsigned long long BEGIN;
+unsigned long long END;
+
 void run(int gpu_device)
 {
 	uint64_t *out;
@@ -245,7 +242,7 @@ void run(int gpu_device)
 	cudaFree(out);
 }
 
-int main()
+int main(int argc, char *argv[])
 {
 	#ifdef BOINC
 	BOINC_OPTIONS options;
@@ -273,9 +270,22 @@ int main()
 		seed = (seed * chunk_mul[CHUNK_SIZE] + chunk_add[CHUNK_SIZE]) & RNG_MASK;
 	for (; offset + 1 <= BEGIN; offset += 1)
 		seed = (seed * RNG_MUL + RNG_ADD) & RNG_MASK;
-	
+
 	int gpu_device = 0;
-	
+
+		for (int i = 1; i < argc; i += 2) {
+		const char *param = argv[i];
+		if (strcmp(param, "-d") == 0 || strcmp(param, "--device") == 0) {
+			gpu_device = atoi(argv[i + 1]);
+		} else if (strcmp(param, "-s") == 0 || strcmp(param, "--start") == 0) {
+			sscanf(argv[i + 1], "%llu", &BEGIN);
+		} else if (strcmp(param, "-e") == 0 || strcmp(param, "--end") == 0) {
+			sscanf(argv[i + 1], "%llu", &END);
+		} else {
+			fprintf(stderr,"Unknown parameter: %s\n", param);
+		}
+	}
+
 	#ifdef BOINC
 	APP_INIT_DATA aid;
 	boinc_get_init_data(aid);
@@ -293,7 +303,7 @@ int main()
 	time_t start_time = time(NULL);
 	while (offset < END) {
 		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(1s);
+		std::this_thread::sleep_for(2s);
 		time_t elapsed = time(NULL) - start_time;
 		uint64_t count = offset - BEGIN;
 		double frac = (double) count / (double) (END - BEGIN);
@@ -302,8 +312,11 @@ int main()
 		boinc_fraction_done(frac);
 		fprintf(stderr, "%10.2fb %7lis %8.2fm/s %6.2f%% =%-6lu\n", done / 1000, elapsed, speed, frac * 100.0, total_seeds);
 	}
+
 	for (std::thread& thread : threads)
 		thread.join();
 		
+	fprintf(stderr, "Done!");
+	fflush(stderr);
 	boinc_finish(0);
 }
