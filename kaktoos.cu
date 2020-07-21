@@ -8,6 +8,7 @@
 #ifndef CACTUS_HEIGHT
 #define CACTUS_HEIGHT 9
 #endif
+
 #ifndef FLOOR_LEVEL
 #define FLOOR_LEVEL 62
 #endif
@@ -206,6 +207,11 @@ std::thread threads[1];
 unsigned long long BEGIN;
 unsigned long long END;
 
+struct checkpoint_vars {
+unsigned long long offset;
+time_t elapsed_chkpoint;
+};
+
 void run(int gpu_device)
 {
 	uint64_t *out;
@@ -266,6 +272,29 @@ int main(int argc, char *argv[])
 		chunk_mul[i + 1] = (chunk_mul[i] * block_mul[BLOCK_SIZE]) & RNG_MASK;
 	}
 
+	FILE *checkpoint_data = boinc_fopen("kaktpoint.txt", "rb");
+
+	if (!checkpoint_data) {
+		fprintf(stderr,"No checkpoint to load\n");
+	} else {
+		#ifdef BOINC
+		boinc_begin_critical_section();
+		#endif 
+
+		struct checkpoint_vars data_store;
+		fread(&data_store, sizeof(data_store), 1, checkpoint_data);
+
+		offset = data_store.offset;
+		elapsed_chkpoint = data_store.elapsed_chkpoint;
+
+		fprintf(stderr,"Checkpoint loaded, task time %d s \n", elapsed_chkpoint);
+		fclose(checkpoint_data);
+		
+		#ifdef BOINC
+		boinc_end_critical_section();
+		#endif
+	}
+
 	for (; offset + GRID_SIZE <= BEGIN; offset += GRID_SIZE)
 		seed = (seed * chunk_mul[CHUNK_SIZE] + chunk_add[CHUNK_SIZE]) & RNG_MASK;
 	for (; offset + 1 <= BEGIN; offset += 1)
@@ -273,7 +302,7 @@ int main(int argc, char *argv[])
 
 	int gpu_device = 0;
 
-		for (int i = 1; i < argc; i += 2) {
+	for (int i = 1; i < argc; i += 2) {
 		const char *param = argv[i];
 		if (strcmp(param, "-d") == 0 || strcmp(param, "--device") == 0) {
 			gpu_device = atoi(argv[i + 1]);
@@ -300,23 +329,64 @@ int main(int argc, char *argv[])
 
 	threads[0] = std::thread(run, gpu_device);
 
+	int checkpoint_ready = 0;
+
 	time_t start_time = time(NULL);
 	while (offset < END) {
 		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(2s);
+		std::this_thread::sleep_for(20s);
 		time_t elapsed = time(NULL) - start_time;
 		uint64_t count = offset - BEGIN;
 		double frac = (double) count / (double) (END - BEGIN);
 		double done = (double) count / 1000000.0;
-		double speed = done / (double) elapsed;
+		
+		#ifdef BOINC
 		boinc_fraction_done(frac);
-		fprintf(stderr, "%10.2fb %7lis %8.2fm/s %6.2f%% =%-6lu\n", done / 1000, elapsed, speed, frac * 100.0, total_seeds);
+		#endif
+		
+		#ifdef BOINC
+		boinc_begin_critical_section(); // Boinc should not interrupt this
+		#endif
+		
+		// Checkpointing section below
+			boinc_delete_file("kaktpoint.txt"); // Don't touch, same func as normal fdel
+			FILE *checkpoint_data = boinc_fopen("kaktpoint.txt", "wb");
+
+			struct checkpoint_vars data_store;
+			data_store.offset = offset;
+			data_store.elapsed_chkpoint = elapsed_chkpoint + elapsed;
+
+			fwrite(&data_store, sizeof(data_store), 1, checkpoint_data);
+
+			fclose(checkpoint_data);
+
+		#ifdef BOINC
+		boinc_end_critical_section();
+		boinc_checkpoint_completed(); // Checkpointing completed
+		#endif
 	}
+	
+	#ifdef BOINC
+	boinc_begin_critical_section();
+	#endif
 
 	for (std::thread& thread : threads)
 		thread.join();
-		
-	fprintf(stderr, "Done!");
+
+	time_t elapsed = time(NULL) - start_time;
+	uint64_t count = offset - BEGIN;
+	double frac = (double) count / (double) (END - BEGIN);
+	double done = (double) count / 1000000.0;
+	double speed = done / (double) elapsed;
+
+	fprintf(stderr, "%10.2fb %7lis %8.2fm/s %6.2f%% =%-6lu\n", done / 1000, elapsed_chkpoint + elapsed, speed, frac * 100.0, total_seeds);
+	fprintf(stderr, "Done!\n");
+
 	fflush(stderr);
+	
+	#ifdef BOINC
+	boinc_end_critical_section();
+	#endif
+
 	boinc_finish(0);
 }
