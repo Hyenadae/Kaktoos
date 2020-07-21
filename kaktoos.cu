@@ -201,6 +201,7 @@ uint64_t chunk_mul[CHUNK_SIZE + 1];
 uint64_t offset = 0;
 uint64_t seed = 0;
 uint64_t total_seeds = 0;
+time_t elapsed_chkpoint = 0;
 std::mutex mutexcuda;
 std::thread threads[1];
 
@@ -208,7 +209,7 @@ unsigned long long BEGIN;
 unsigned long long END;
 
 struct checkpoint_vars {
-unsigned long long offset;
+uint64_t offset;
 time_t elapsed_chkpoint;
 };
 
@@ -338,7 +339,6 @@ int main(int argc, char *argv[])
 		time_t elapsed = time(NULL) - start_time;
 		uint64_t count = offset - BEGIN;
 		double frac = (double) count / (double) (END - BEGIN);
-		double done = (double) count / 1000000.0;
 		
 		#ifdef BOINC
 		boinc_fraction_done(frac);
