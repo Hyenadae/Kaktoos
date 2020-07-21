@@ -272,6 +272,20 @@ int main(int argc, char *argv[])
 		chunk_add[i + 1] = (chunk_add[i] * block_mul[BLOCK_SIZE] + block_add[BLOCK_SIZE]) & RNG_MASK;
 		chunk_mul[i + 1] = (chunk_mul[i] * block_mul[BLOCK_SIZE]) & RNG_MASK;
 	}
+	
+	int gpu_device = 0;
+	for (int i = 1; i < argc; i += 2) {
+		const char *param = argv[i];
+		if (strcmp(param, "-d") == 0 || strcmp(param, "--device") == 0) {
+			gpu_device = atoi(argv[i + 1]);
+		} else if (strcmp(param, "-s") == 0 || strcmp(param, "--start") == 0) {
+			sscanf(argv[i + 1], "%llu", &BEGIN);
+		} else if (strcmp(param, "-e") == 0 || strcmp(param, "--end") == 0) {
+			sscanf(argv[i + 1], "%llu", &END);
+		} else {
+			fprintf(stderr,"Unknown parameter: %s\n", param);
+		}
+	}
 
 	FILE *checkpoint_data = boinc_fopen("kaktpoint.txt", "rb");
 
@@ -285,10 +299,10 @@ int main(int argc, char *argv[])
 		struct checkpoint_vars data_store;
 		fread(&data_store, sizeof(data_store), 1, checkpoint_data);
 
-		offset = data_store.offset;
+		BEGIN = data_store.offset;
 		elapsed_chkpoint = data_store.elapsed_chkpoint;
 
-		fprintf(stderr,"Checkpoint loaded, task time %d s \n", elapsed_chkpoint);
+		fprintf(stderr,"Checkpoint loaded, task time %d s, seed pos: %llu\n", elapsed_chkpoint, BEGIN);
 		fclose(checkpoint_data);
 		
 		#ifdef BOINC
@@ -300,21 +314,6 @@ int main(int argc, char *argv[])
 		seed = (seed * chunk_mul[CHUNK_SIZE] + chunk_add[CHUNK_SIZE]) & RNG_MASK;
 	for (; offset + 1 <= BEGIN; offset += 1)
 		seed = (seed * RNG_MUL + RNG_ADD) & RNG_MASK;
-
-	int gpu_device = 0;
-
-	for (int i = 1; i < argc; i += 2) {
-		const char *param = argv[i];
-		if (strcmp(param, "-d") == 0 || strcmp(param, "--device") == 0) {
-			gpu_device = atoi(argv[i + 1]);
-		} else if (strcmp(param, "-s") == 0 || strcmp(param, "--start") == 0) {
-			sscanf(argv[i + 1], "%llu", &BEGIN);
-		} else if (strcmp(param, "-e") == 0 || strcmp(param, "--end") == 0) {
-			sscanf(argv[i + 1], "%llu", &END);
-		} else {
-			fprintf(stderr,"Unknown parameter: %s\n", param);
-		}
-	}
 
 	#ifdef BOINC
 	APP_INIT_DATA aid;
@@ -329,8 +328,6 @@ int main(int argc, char *argv[])
 	#endif
 
 	threads[0] = std::thread(run, gpu_device);
-
-	int checkpoint_ready = 0;
 
 	time_t start_time = time(NULL);
 	while (offset < END) {
