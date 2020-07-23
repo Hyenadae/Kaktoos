@@ -245,7 +245,7 @@ void run(int gpu_device)
 			for (uint64_t i = 0; i < *out_n; i++){
 				fprintf(stderr,"Found seed: %llu, %llu, height: %d\n", out[i], out[i] & ((1ULL << 48ULL) - 1ULL), (int)(out[i] >> 58ULL));
 			
-				fprintf(stderr,"%llu\n", out[i]);
+				fprintf(stderr,"%"PRId64 "\n", out[i]);
 				fflush(stderr);
 			}
 		}
