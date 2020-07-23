@@ -387,9 +387,9 @@ int main(int argc, char *argv[])
 	double done = (double) count / 1000000.0;
 	double speed = done / (double) elapsed;
 
-	fprintf(stderr, "\nSpeed: %.21fm/s\n", elapsed_chkpoint + elapsed);
+	fprintf(stderr, "\nSpeed: %.21fm/s\n", speed );
         fprintf(stderr, "Done\n");
-	fprintf(stderr, "Processed: %llu seeds in %.2lfs seconds\n", END - BEGINOrig, elapsed_chkpoint + elapsed );
+	fprintf(stderr, "Processed: %llu seeds in %.2lfs seconds\n", END - BEGINOrig, (double) elapsed_chkpoint + (double) elapsed );
 
 	fflush(stderr);
 	
