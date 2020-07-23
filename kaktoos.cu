@@ -6,7 +6,7 @@
 #define RNG_MASK ((1ULL << 48) - 1)
 
 #ifndef CACTUS_HEIGHT
-#define CACTUS_HEIGHT 9
+#define CACTUS_HEIGHT 6
 #endif
 
 #ifndef FLOOR_LEVEL
