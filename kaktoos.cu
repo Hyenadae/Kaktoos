@@ -241,9 +241,15 @@ void run(int gpu_device)
 		{
 			std::lock_guard<std::mutex> lock(mutexcuda);
 			total_seeds += *out_n;
+
 			for (uint64_t i = 0; i < *out_n; i++)
-				fprintf(stderr,"%lu\n", out[i]);
-			fflush(stderr);
+				fprintf(stderr,"Found seed: %llu, %llu, height: %d\n",
+ 				out[i],
+				out[i] & ((1ULL << 48ULL) - 1ULL),
+				(int)(out[i] >> 58ULL));
+			
+				fprintf(stderr,"%llu\n", out[i]);
+				fflush(stderr);
 		}
 	}
 
