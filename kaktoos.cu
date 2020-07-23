@@ -243,10 +243,7 @@ void run(int gpu_device)
 			total_seeds += *out_n;
 
 			for (uint64_t i = 0; i < *out_n; i++)
-				fprintf(stderr,"Found seed: %llu, %llu, height: %d\n",
- 				out[i],
-				out[i] & ((1ULL << 48ULL) - 1ULL),
-				(int)(out[i] >> 58ULL));
+				fprintf(stderr,"Found seed: %llu, %llu, height: %d\n", out[i], out[i] & ((1ULL << 48ULL) - 1ULL), (int)(out[i] >> 58ULL));
 			
 				fprintf(stderr,"%llu\n", out[i]);
 				fflush(stderr);
@@ -389,7 +386,6 @@ int main(int argc, char *argv[])
 
 	time_t elapsed = time(NULL) - start_time;
 	uint64_t count = offset - BEGIN;
-	double frac = (double) count / (double) (END - BEGIN);
 	double done = (double) count / 1000000.0;
 	double speed = done / (double) elapsed;
 
