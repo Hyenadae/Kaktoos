@@ -211,14 +211,14 @@ unsigned long long END;
 int checkpoint_now;
 
 struct checkpoint_vars {
-uint64_t offset;
+unsigned long long offset;
 time_t elapsed_chkpoint;
 };
 
 void run(int gpu_device)
 {
-	uint64_t *out;
-	uint64_t *out_n;
+	unsigned long long *out;
+	unsigned long long *out_n;
 	cudaSetDevice(gpu_device);
 	cudaMallocManaged(&out, GRID_SIZE * sizeof(*out));
 	cudaMallocManaged(&out_n, sizeof(*out_n));
@@ -242,11 +242,12 @@ void run(int gpu_device)
 			std::lock_guard<std::mutex> lock(mutexcuda);
 			total_seeds += *out_n;
 
-			for (uint64_t i = 0; i < *out_n; i++)
+			for (uint64_t i = 0; i < *out_n; i++){
 				fprintf(stderr,"Found seed: %llu, %llu, height: %d\n", out[i], out[i] & ((1ULL << 48ULL) - 1ULL), (int)(out[i] >> 58ULL));
 			
 				fprintf(stderr,"%llu\n", out[i]);
 				fflush(stderr);
+			}
 		}
 	}
 
