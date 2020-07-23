@@ -27,10 +27,10 @@
 #endif
 #endif
 
-__device__ uint64_t block_add_gpu[BLOCK_SIZE + 1];
-__device__ uint64_t block_mul_gpu[BLOCK_SIZE + 1];
-__device__ uint64_t chunk_add_gpu[CHUNK_SIZE + 1];
-__device__ uint64_t chunk_mul_gpu[CHUNK_SIZE + 1];
+__device__ unsigned long long block_add_gpu[BLOCK_SIZE + 1];
+__device__ unsigned long long block_mul_gpu[BLOCK_SIZE + 1];
+__device__ unsigned long long chunk_add_gpu[CHUNK_SIZE + 1];
+__device__ unsigned long long chunk_mul_gpu[CHUNK_SIZE + 1];
 
 __device__ inline int32_t next(uint32_t *random, uint32_t *index, int bits)
 {
@@ -50,7 +50,7 @@ __device__ inline int32_t next_int(uint32_t *random, uint32_t *index, int32_t bo
 __device__ inline int32_t next_int_unknown(uint32_t *random, uint32_t *index, int32_t bound)
 {
 	if ((bound & -bound) == bound) {
-		return (int32_t) ((bound * (uint64_t) next(random, index, 31)) >> 31);
+		return (int32_t) ((bound * (unsigned long long) next(random, index, 31)) >> 31);
 	} else {
 		return next_int(random, index, bound);
 	}
@@ -66,7 +66,7 @@ __device__ inline void increase(uint32_t *heightmap, uint16_t pos, uint8_t adden
 	heightmap[pos >> 3] += addend << ((pos & 7) << 2);
 }
 
-__global__ void crack(uint64_t seed, uint64_t *out, uint64_t *out_n)
+__global__ void crack(unsigned long long seed, unsigned long long *out, unsigned long long *out_n)
 {
 	__shared__ uint32_t random[BLOCK_SIZE + 1024];
 	__shared__ uint32_t skip_index[BLOCK_SIZE + 1024 - 100];
@@ -81,7 +81,7 @@ __global__ void crack(uint64_t seed, uint64_t *out, uint64_t *out_n)
 
 	seed = (seed * chunk_mul_gpu[blockIdx.x] + chunk_add_gpu[blockIdx.x]) & RNG_MASK;
 	seed = (seed * block_mul_gpu[threadIdx.x] + block_add_gpu[threadIdx.x]) & RNG_MASK;
-	uint64_t seed2 = seed;
+	unsigned long long seed2 = seed;
 	seed = ((seed - 11ULL) * 246154705703781ULL) & RNG_MASK;
 	random[threadIdx.x + BLOCK_SIZE * 0] = (uint32_t) (seed2 >> 16);
 	for (int i = threadIdx.x + BLOCK_SIZE; i < BLOCK_SIZE + 1024; i += BLOCK_SIZE) {
@@ -194,13 +194,13 @@ __global__ void crack(uint64_t seed, uint64_t *out, uint64_t *out_n)
 	}
 }
 
-uint64_t block_add[BLOCK_SIZE + 1];
-uint64_t block_mul[BLOCK_SIZE + 1];
-uint64_t chunk_add[CHUNK_SIZE + 1];
-uint64_t chunk_mul[CHUNK_SIZE + 1];
-uint64_t offset = 0;
-uint64_t seed = 0;
-uint64_t total_seeds = 0;
+unsigned long long block_add[BLOCK_SIZE + 1];
+unsigned long long block_mul[BLOCK_SIZE + 1];
+unsigned long long chunk_add[CHUNK_SIZE + 1];
+unsigned long long chunk_mul[CHUNK_SIZE + 1];
+unsigned long long offset = 0;
+unsigned long long seed = 0;
+unsigned long long total_seeds = 0;
 time_t elapsed_chkpoint = 0;
 std::mutex mutexcuda;
 std::thread threads[1];
@@ -211,14 +211,14 @@ unsigned long long END;
 int checkpoint_now;
 
 struct checkpoint_vars {
-uint64_t offset;
+unsigned long long offset;
 time_t elapsed_chkpoint;
 };
 
 void run(int gpu_device)
 {
-	uint64_t *out;
-	uint64_t *out_n;
+	unsigned long long *out;
+	unsigned long long *out_n;
 	cudaSetDevice(gpu_device);
 	cudaMallocManaged(&out, GRID_SIZE * sizeof(*out));
 	cudaMallocManaged(&out_n, sizeof(*out_n));
@@ -232,7 +232,7 @@ void run(int gpu_device)
 		{
 			std::lock_guard<std::mutex> lock(mutexcuda);
 			if (offset >= END) break;
-			uint64_t seed_gpu = (seed * RNG_MUL + RNG_ADD) & RNG_MASK;
+			unsigned long long seed_gpu = (seed * RNG_MUL + RNG_ADD) & RNG_MASK;
 			crack<<<CHUNK_SIZE, BLOCK_SIZE>>>(seed_gpu, out, out_n);
 			offset += GRID_SIZE;
 			seed = (seed * chunk_mul[CHUNK_SIZE] + chunk_add[CHUNK_SIZE]) & RNG_MASK;
@@ -241,9 +241,11 @@ void run(int gpu_device)
 		{
 			std::lock_guard<std::mutex> lock(mutexcuda);
 			total_seeds += *out_n;
-			for (uint64_t i = 0; i < *out_n; i++)
-				fprintf(stderr,"%lu\n", out[i]);
-			fflush(stderr);
+
+			for (unsigned long long i = 0; i < *out_n; i++){
+				fprintf(stderr,"s: %llu,\n", out[i], CACTUS_HEIGHT);
+				fflush(stderr);
+			}
 		}
 	}
 
@@ -263,14 +265,14 @@ int main(int argc, char *argv[])
 	
 	block_add[0] = 0;
 	block_mul[0] = 1;
-	for (uint64_t i = 0; i < BLOCK_SIZE; i++) {
+	for (unsigned long long i = 0; i < BLOCK_SIZE; i++) {
 		block_add[i + 1] = (block_add[i] * RNG_MUL + RNG_ADD) & RNG_MASK;
 		block_mul[i + 1] = (block_mul[i] * RNG_MUL) & RNG_MASK;
 	}
 
 	chunk_add[0] = 0;
 	chunk_mul[0] = 1;
-	for (uint64_t i = 0; i < CHUNK_SIZE; i++) {
+	for (unsigned long long i = 0; i < CHUNK_SIZE; i++) {
 		chunk_add[i + 1] = (chunk_add[i] * block_mul[BLOCK_SIZE] + block_add[BLOCK_SIZE]) & RNG_MASK;
 		chunk_mul[i + 1] = (chunk_mul[i] * block_mul[BLOCK_SIZE]) & RNG_MASK;
 	}
@@ -339,7 +341,7 @@ int main(int argc, char *argv[])
 		using namespace std::chrono_literals;
 		std::this_thread::sleep_for(1s);
 		time_t elapsed = time(NULL) - start_time;
-		uint64_t count = offset - BEGIN;
+		unsigned long long count = offset - BEGIN;
 		double frac = (double) count / (double) (END - BEGIN);
 		
 		#ifdef BOINC
@@ -382,14 +384,13 @@ int main(int argc, char *argv[])
 		thread.join();
 
 	time_t elapsed = time(NULL) - start_time;
-	uint64_t count = offset - BEGIN;
-	double frac = (double) count / (double) (END - BEGIN);
+	unsigned long long count = offset - BEGIN;
 	double done = (double) count / 1000000.0;
 	double speed = done / (double) elapsed;
 
-	fprintf(stderr, "\nSpeed: %.21fm/s\n", elapsed_chkpoint + elapsed);
+	fprintf(stderr, "\nSpeed: %.21fm/s\n", speed );
         fprintf(stderr, "Done\n");
-	fprintf(stderr, "Processed: %llu seeds in %.2lfs seconds\n", END - BEGINOrig, elapsed_chkpoint + elapsed );
+	fprintf(stderr, "Processed: %llu seeds in %.2lfs seconds\n", END - BEGINOrig, (double) elapsed_chkpoint + (double) elapsed );
 
 	fflush(stderr);
 	
