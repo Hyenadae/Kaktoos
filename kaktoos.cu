@@ -243,9 +243,7 @@ void run(int gpu_device)
 			total_seeds += *out_n;
 
 			for (unsigned long long i = 0; i < *out_n; i++){
-				fprintf(stderr,"Found seed: %llu, %llu, height: %d\n", out[i], out[i] & ((1ULL << 48ULL) - 1ULL), (int)(out[i] >> 58ULL));
-			
-				fprintf(stderr,"%llu \n", out[i]);
+				fprintf(stderr,"Found seed: %llu , height: >= %i )\n", out[i], CACTUS_HEIGHT);
 				fflush(stderr);
 			}
 		}
