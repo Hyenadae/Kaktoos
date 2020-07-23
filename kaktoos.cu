@@ -206,7 +206,9 @@ std::mutex mutexcuda;
 std::thread threads[1];
 
 unsigned long long BEGIN;
+unsigned long long BEGINOrig;
 unsigned long long END;
+int checkpoint_now;
 
 struct checkpoint_vars {
 uint64_t offset;
@@ -287,6 +289,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	BEGINOrig = BEGIN;
+
 	FILE *checkpoint_data = boinc_fopen("kaktpoint.txt", "rb");
 
 	if (!checkpoint_data) {
@@ -329,10 +333,11 @@ int main(int argc, char *argv[])
 
 	threads[0] = std::thread(run, gpu_device);
 
+	checkpoint_now = 0;
 	time_t start_time = time(NULL);
 	while (offset < END) {
 		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(20s);
+		std::this_thread::sleep_for(1s);
 		time_t elapsed = time(NULL) - start_time;
 		uint64_t count = offset - BEGIN;
 		double frac = (double) count / (double) (END - BEGIN);
@@ -340,6 +345,10 @@ int main(int argc, char *argv[])
 		#ifdef BOINC
 		boinc_fraction_done(frac);
 		#endif
+		
+		checkpoint_now++;
+
+		if (checkpoint_now >= 30 || boinc_time_to_checkpoint() ){  // 30 for 30 secs before checkpoint
 		
 		#ifdef BOINC
 		boinc_begin_critical_section(); // Boinc should not interrupt this
@@ -356,11 +365,13 @@ int main(int argc, char *argv[])
 			fwrite(&data_store, sizeof(data_store), 1, checkpoint_data);
 
 			fclose(checkpoint_data);
+			checkpoint_now=0;
 
 		#ifdef BOINC
 		boinc_end_critical_section();
 		boinc_checkpoint_completed(); // Checkpointing completed
 		#endif
+		}
 	}
 	
 	#ifdef BOINC
@@ -376,8 +387,9 @@ int main(int argc, char *argv[])
 	double done = (double) count / 1000000.0;
 	double speed = done / (double) elapsed;
 
-	fprintf(stderr, "%10.2fb %7lis %8.2fm/s %6.2f%% =%-6lu\n", done / 1000, elapsed_chkpoint + elapsed, speed, frac * 100.0, total_seeds);
-	fprintf(stderr, "Done!\n");
+	fprintf(stderr, "\nSpeed: %.21fm/s\n", elapsed_chkpoint + elapsed);
+        fprintf(stderr, "Done\n");
+	fprintf(stderr, "Processed: %llu seeds in %.2lfs seconds\n", END - BEGINOrig, elapsed_chkpoint + elapsed );
 
 	fflush(stderr);
 	
