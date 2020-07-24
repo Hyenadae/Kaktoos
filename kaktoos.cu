@@ -17,7 +17,6 @@
 #include <cstdint>
 #include <mutex>
 #include <thread>
-
 #include <cuda.h>
 
 #ifdef BOINC
@@ -215,8 +214,9 @@ unsigned long long offset;
 time_t elapsed_chkpoint;
 };
 
-void run(int gpu_device)
+void run(int gpu_device, char* output)
 {
+//	FILE* kaktseeds = fopen("kaktseeds.txt", "w+");
 	unsigned long long *out;
 	unsigned long long *out_n;
 	cudaSetDevice(gpu_device);
@@ -230,7 +230,6 @@ void run(int gpu_device)
 	while (true) {
 		*out_n = 0;
 		{
-			std::lock_guard<std::mutex> lock(mutexcuda);
 			if (offset >= END) break;
 			unsigned long long seed_gpu = (seed * RNG_MUL + RNG_ADD) & RNG_MASK;
 			crack<<<CHUNK_SIZE, BLOCK_SIZE>>>(seed_gpu, out, out_n);
@@ -239,12 +238,9 @@ void run(int gpu_device)
 		}
 		cudaDeviceSynchronize();
 		{
-			std::lock_guard<std::mutex> lock(mutexcuda);
 			total_seeds += *out_n;
-
 			for (unsigned long long i = 0; i < *out_n; i++){
-				fprintf(stderr,"s: %llu,\n", out[i], CACTUS_HEIGHT);
-				fflush(stderr);
+				output += sprintf(output + strlen(output),"s: %llu,\n", out[i]);
 			}
 		}
 	}
@@ -332,8 +328,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"stndalone gpuindex %i \n", gpu_device);
 	}
 	#endif
-
-	threads[0] = std::thread(run, gpu_device);
+	char* output = (char*) malloc(sizeof(char)*1000000);
+	output[0] = '\0';
+	threads[0] = std::thread(run, gpu_device, output);
 
 	checkpoint_now = 0;
 	time_t start_time = time(NULL);
@@ -393,7 +390,10 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "Processed: %llu seeds in %.2lfs seconds\n", END - BEGINOrig, (double) elapsed_chkpoint + (double) elapsed );
 
 	fflush(stderr);
-	
+	FILE* kaktseeds = fopen("kaktseeds.txt", "w+");
+	fprintf(kaktseeds, "%s", output);
+	fflush(kaktseeds);
+	fclose(kaktseeds);
 	#ifdef BOINC
 	boinc_end_critical_section();
 	#endif
