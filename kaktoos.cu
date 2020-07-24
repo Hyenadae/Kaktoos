@@ -216,7 +216,9 @@ time_t elapsed_chkpoint;
 
 void run(int gpu_device, char* output)
 {
-//	FILE* kaktseeds = fopen("kaktseeds.txt", "w+");
+
+FILE* kaktseeds = fopen("kaktseeds.txt", "w+");
+
 	unsigned long long *out;
 	unsigned long long *out_n;
 	cudaSetDevice(gpu_device);
@@ -240,11 +242,15 @@ void run(int gpu_device, char* output)
 		{
 			total_seeds += *out_n;
 			for (unsigned long long i = 0; i < *out_n; i++){
-				output += sprintf(output + strlen(output),"s: %llu,\n", out[i]);
+
+				fprintf(kaktseeds,"s: %llu,\n", out[i], CACTUS_HEIGHT);
+
 			}
+			fflush(kaktseeds);
 		}
 	}
 
+	fclose(kaktseeds);
 	cudaFree(out_n);
 	cudaFree(out);
 }
@@ -328,9 +334,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr,"stndalone gpuindex %i \n", gpu_device);
 	}
 	#endif
-	char* output = (char*) malloc(sizeof(char)*1000000);
-	output[0] = '\0';
-	threads[0] = std::thread(run, gpu_device, output);
+
+	threads[0] = std::thread(run, gpu_device);
+
 
 	checkpoint_now = 0;
 	time_t start_time = time(NULL);
@@ -390,10 +396,7 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "Processed: %llu seeds in %.2lfs seconds\n", END - BEGINOrig, (double) elapsed_chkpoint + (double) elapsed );
 
 	fflush(stderr);
-	FILE* kaktseeds = fopen("kaktseeds.txt", "w+");
-	fprintf(kaktseeds, "%s", output);
-	fflush(kaktseeds);
-	fclose(kaktseeds);
+
 	#ifdef BOINC
 	boinc_end_critical_section();
 	#endif
