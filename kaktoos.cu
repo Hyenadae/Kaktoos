@@ -214,7 +214,7 @@ unsigned long long offset;
 time_t elapsed_chkpoint;
 };
 
-void run(int gpu_device, char* output)
+void run(int gpu_device)
 {
 
 FILE* kaktseeds = fopen("kaktseeds.txt", "w+");
